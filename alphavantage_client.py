@@ -128,12 +128,77 @@ class AlphaVantageClient:
                 continue
         return None
 
+    def fetch_daily_series(self, symbol: str, *, adjusted: bool = True, outputsize: str = "compact") -> Optional[tuple]:
+        """Fetch daily closing price series for a symbol.
+
+        Returns (dates, closes) where dates is np.ndarray[datetime64[D]] and closes is np.ndarray[float],
+        both sorted ascending by date. If adjusted=True, uses TIME_SERIES_DAILY_ADJUSTED and prefers
+        adjusted close; otherwise uses TIME_SERIES_DAILY.
+        """
+        if adjusted:
+            data = self._request({
+                "function": "TIME_SERIES_DAILY_ADJUSTED",
+                "symbol": symbol,
+                "outputsize": outputsize,
+            })
+            if not data:
+                return None
+            series = data.get("Time Series (Daily)")
+            if not isinstance(series, dict) or not series:
+                return None
+            items = sorted(series.items())  # ascending by date string
+            dates = np.array([np.datetime64(k, "D") for k, _ in items])
+            closes = np.array([
+                _to_float(v.get("5. adjusted close")) or _to_float(v.get("4. close")) or np.nan
+                for _, v in items
+            ], dtype=float)
+        else:
+            data = self._request({
+                "function": "TIME_SERIES_DAILY",
+                "symbol": symbol,
+                "outputsize": outputsize,
+            })
+            if not data:
+                return None
+            series = data.get("Time Series (Daily)")
+            if not isinstance(series, dict) or not series:
+                return None
+            items = sorted(series.items())
+            dates = np.array([np.datetime64(k, "D") for k, _ in items])
+            closes = np.array([
+                _to_float(v.get("4. close")) or np.nan
+                for _, v in items
+            ], dtype=float)
+
+        # Drop NaNs if any
+        mask = np.isfinite(closes)
+        if not np.any(mask):
+            return None
+        return dates[mask], closes[mask]
+
     def resolve_S0(self, S0: Optional[float] = None, symbol: str = "SPY") -> Optional[float]:
         if S0 is not None and np.isfinite(S0):
             return float(S0)
         return self.fetch_price(symbol)
 
 
-__all__ = ["AlphaVantageClient"]
+def fetch_price(symbol: str, api_key: Optional[str] = None) -> Optional[float]:
+    return AlphaVantageClient(api_key=api_key).fetch_price(symbol)
+
+
+def fetch_daily_series(symbol: str, *, adjusted: bool = True, outputsize: str = "compact", api_key: Optional[str] = None) -> Optional[tuple]:
+    return AlphaVantageClient(api_key=api_key).fetch_daily_series(symbol, adjusted=adjusted, outputsize=outputsize)
+
+
+def resolve_S0(S0: Optional[float] = None, symbol: str = "SPY", api_key: Optional[str] = None) -> Optional[float]:
+    return AlphaVantageClient(api_key=api_key).resolve_S0(S0=S0, symbol=symbol)
+
+
+__all__ = [
+    "AlphaVantageClient",
+    "fetch_price",
+    "fetch_daily_series",
+    "resolve_S0",
+]
 
 
