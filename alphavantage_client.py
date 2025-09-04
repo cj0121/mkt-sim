@@ -8,6 +8,7 @@ import time
 
 import requests
 import numpy as np
+import warnings
 
 
 ALPHAVANTAGE_BASE_URL = "https://www.alphavantage.co/query"
@@ -135,40 +136,54 @@ class AlphaVantageClient:
         both sorted ascending by date. If adjusted=True, uses TIME_SERIES_DAILY_ADJUSTED and prefers
         adjusted close; otherwise uses TIME_SERIES_DAILY.
         """
-        if adjusted:
-            data = self._request({
-                "function": "TIME_SERIES_DAILY_ADJUSTED",
-                "symbol": symbol,
-                "outputsize": outputsize,
-            })
-            if not data:
+        def _parse_daily(data_obj: Optional[Dict[str, Any]], prefer_adjusted: bool) -> Optional[tuple]:
+            if not data_obj:
                 return None
-            series = data.get("Time Series (Daily)")
-            if not isinstance(series, dict) or not series:
-                return None
-            items = sorted(series.items())  # ascending by date string
-            dates = np.array([np.datetime64(k, "D") for k, _ in items])
-            closes = np.array([
-                _to_float(v.get("5. adjusted close")) or _to_float(v.get("4. close")) or np.nan
-                for _, v in items
-            ], dtype=float)
-        else:
-            data = self._request({
-                "function": "TIME_SERIES_DAILY",
-                "symbol": symbol,
-                "outputsize": outputsize,
-            })
-            if not data:
-                return None
-            series = data.get("Time Series (Daily)")
+            series = data_obj.get("Time Series (Daily)")
             if not isinstance(series, dict) or not series:
                 return None
             items = sorted(series.items())
             dates = np.array([np.datetime64(k, "D") for k, _ in items])
-            closes = np.array([
-                _to_float(v.get("4. close")) or np.nan
-                for _, v in items
-            ], dtype=float)
+            if prefer_adjusted:
+                closes = np.array([
+                    _to_float(v.get("5. adjusted close")) or _to_float(v.get("4. close")) or np.nan
+                    for _, v in items
+                ], dtype=float)
+            else:
+                closes = np.array([
+                    _to_float(v.get("4. close")) or np.nan
+                    for _, v in items
+                ], dtype=float)
+            mask = np.isfinite(closes)
+            if not np.any(mask):
+                return None
+            return dates[mask], closes[mask]
+
+        # Try adjusted series first if requested; fallback to unadjusted with a warning
+        if adjusted:
+            data_adj = self._request({
+                "function": "TIME_SERIES_DAILY_ADJUSTED",
+                "symbol": symbol,
+                "outputsize": outputsize,
+            })
+            parsed = _parse_daily(data_adj, prefer_adjusted=True)
+            if parsed is not None:
+                return parsed
+            # Fallback to unadjusted
+            warnings.warn("AlphaVantage adjusted series unavailable; falling back to unadjusted TIME_SERIES_DAILY.")
+            data_unadj = self._request({
+                "function": "TIME_SERIES_DAILY",
+                "symbol": symbol,
+                "outputsize": outputsize,
+            })
+            return _parse_daily(data_unadj, prefer_adjusted=False)
+        else:
+            data_unadj = self._request({
+                "function": "TIME_SERIES_DAILY",
+                "symbol": symbol,
+                "outputsize": outputsize,
+            })
+            return _parse_daily(data_unadj, prefer_adjusted=False)
 
         # Drop NaNs if any
         mask = np.isfinite(closes)

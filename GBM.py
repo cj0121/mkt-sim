@@ -174,6 +174,90 @@ class GBM:
             return paths, dates
         return paths
 
+    def test_moment(
+        self,
+        S0: float,
+        mu: float,
+        sigma: float,
+        paths: Optional[np.ndarray] = None,
+        *,
+        n_days: int = 252,
+        n_paths: int = 100_000,
+        seed: Optional[int] = None,
+    ) -> dict:
+        """Test simulated terminal moment(s) against GBM theoretical moments.
+
+        If `paths` is None, simulate with provided parameters; otherwise use given paths.
+        Returns a summary dict and raises AssertionError on failure (as per dynamic checks).
+        """
+        # Produce or validate paths
+        if paths is None:
+            paths = self.paths(S0, mu, sigma, n_days=n_days, n_paths=n_paths, seed=seed)
+        elif paths.ndim != 2:
+            raise ValueError("paths must be a 2D array shaped (M, T+1)")
+
+        # Infer dimensions and effective time in years
+        M = int(paths.shape[0])
+        T_steps = int(paths.shape[1] - 1)
+        t = T_steps * self.dt
+
+        S_T = paths[:, -1]
+        X_T = np.log(S_T / float(S0))
+
+        # Theoretical targets
+        E_S = float(S0 * np.exp(mu * t))
+        VarS = float((S0 ** 2) * np.exp(2.0 * mu * t) * (np.exp((sigma ** 2) * t) - 1.0))
+        E_X = float((mu - 0.5 * (sigma ** 2)) * t)
+        VarX = float((sigma ** 2) * t)
+
+        # Monte Carlo estimates
+        mS = float(S_T.mean())
+        vS = float(S_T.var(ddof=1))
+        mX = float(X_T.mean())
+        vX = float(X_T.var(ddof=1))
+
+        # MC standard error for mean of S_T
+        se_mS = float(S_T.std(ddof=1) / np.sqrt(M))
+
+        # Dynamic tolerances
+        k = 2.0 + 10.0 / np.sqrt(M)
+        rtol_var = 0.02 + 50.0 / np.sqrt(M)
+
+        # Assertions
+        assert abs(mS - E_S) < k * se_mS, (
+            f"Mean price off: mS={mS:.4f}, E_S={E_S:.4f}, SE={se_mS:.6f}, tol={k:.2f}*SE"
+        )
+        assert np.isclose(vS, VarS, rtol=rtol_var), (
+            f"Var(S) off: vS={vS:.4f}, VarS={VarS:.4f}, rtol={rtol_var:.3f}"
+        )
+        assert np.isclose(mX, E_X, rtol=rtol_var), (
+            f"Mean log-return off: mX={mX:.6f}, E_X={E_X:.6f}, rtol={rtol_var:.3f}"
+        )
+        assert np.isclose(vX, VarX, rtol=rtol_var), (
+            f"Var(log-return) off: vX={vX:.6f}, VarX={VarX:.6f}, rtol={rtol_var:.3f}"
+        )
+
+        print("✅ GBM simulation passes dynamic moment checks.")
+        print(f"Mean S_t: sim={mS:.4f}, theory={E_S:.4f} (SE={se_mS:.6f}, tol={k:.2f}*SE)")
+        print(f"Var  S_t: sim={vS:.4f}, theory={VarS:.4f} (rtol={rtol_var:.3f})")
+        print(f"Mean ln(S_t/S_0): sim={mX:.6f}, theory={E_X:.6f} (rtol={rtol_var:.3f})")
+        print(f"Var  ln(S_t/S_0): sim={vX:.6f}, theory={VarX:.6f} (rtol={rtol_var:.3f})")
+
+        return {
+            "M": M,
+            "t": t,
+            "mS": mS,
+            "vS": vS,
+            "mX": mX,
+            "vX": vX,
+            "E_S": E_S,
+            "VarS": VarS,
+            "E_X": E_X,
+            "VarX": VarX,
+            "se_mS": se_mS,
+            "k": k,
+            "rtol_var": rtol_var,
+        }
     def paths_timevarying(
         self,
         S0: float,
