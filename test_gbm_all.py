@@ -97,19 +97,33 @@ def main():
     fig_arrmode = plot_paths((path_arrmode, dates_arrmode), title="Array-Mode Single Path")
     fig_arrmode.show()
 
-    # 9) Polygon helpers (optional). If module or key missing, skip gracefully.
+    # # 9) Polygon helpers (optional). If module or key missing, skip gracefully.
+    # try:
+    #     from polygon_client import PolygonClient, fetch_price_polygon, fetch_spx_price_polygon, resolve_S0
+    #     import os
+    #     key = os.getenv("POLYGON_API_KEY")
+    #     pc = PolygonClient(api_key=key) if key else PolygonClient(api_key=None)
+    #     spx = pc.fetch_spx()
+    #     aapl = pc.fetch_price("AAPL")
+    #     print("Polygon fetched I:SPX:", spx, "AAPL:", aapl)
+    #     s0_auto = pc.resolve_S0(None, ticker="I:SPX")
+    #     print("Resolved S0 (I:SPX):", s0_auto)
+    # except Exception as e:
+    #     print("Polygon test skipped:", e)
+
+    # 10) AlphaVantage helpers (optional). If key missing, skip gracefully.
     try:
-        from polygon_client import PolygonClient, fetch_price_polygon, fetch_spx_price_polygon, resolve_S0
+        from alphavantage_client import AlphaVantageClient
         import os
-        key = os.getenv("POLYGON_API_KEY")
-        pc = PolygonClient(api_key=key) if key else PolygonClient(api_key=None)
-        spx = pc.fetch_spx()
-        aapl = pc.fetch_price("AAPL")
-        print("Polygon fetched I:SPX:", spx, "AAPL:", aapl)
-        s0_auto = pc.resolve_S0(None, ticker="I:SPX")
-        print("Resolved S0 (I:SPX):", s0_auto)
+        av_key = os.getenv("ALPHAVANTAGE_API_KEY")
+        ac = AlphaVantageClient(api_key=av_key)
+        aapl_av = ac.fetch_price("AAPL")
+        spy_av = ac.fetch_price("SPY")
+        print("AlphaVantage fetched AAPL:", aapl_av, "SPY:", spy_av)
+        s0_av = ac.resolve_S0(None, symbol="SPY")
+        print("Resolved S0 via AV (SPY):", s0_av)
     except Exception as e:
-        print("Polygon test skipped:", e)
+        print("AlphaVantage test skipped:", e)
 
 
 if __name__ == "__main__":
