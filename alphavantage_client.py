@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Optional, Dict, Any
 import os
 import json
@@ -24,11 +23,23 @@ def _to_float(value: Any) -> Optional[float]:
         return None
 
 
-@dataclass
 class AlphaVantageClient:
-    api_key: Optional[str] = None
-    timeout_sec: float = 10.0
-    max_retries: int = 1
+    def __init__(self, api_key: Optional[str] = None, timeout_sec: float = 10.0, max_retries: int = 1) -> None:
+        self.api_key: Optional[str] = api_key
+        self.timeout_sec: float = timeout_sec
+        self.max_retries: int = max_retries
+
+        if self.api_key is None:
+            key = self._get_key()
+            if key is None:
+                # Try loading a .env lazily if not already present
+                try:
+                    from dotenv import load_dotenv  # type: ignore
+                    load_dotenv()
+                except Exception:
+                    pass
+                key = self._get_key()
+            self.api_key = key
 
     def _get_key(self) -> Optional[str]:
         return self.api_key or os.getenv("ALPHAVANTAGE_API_KEY")
