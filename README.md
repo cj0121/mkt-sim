@@ -267,3 +267,40 @@ series = StockSeries.from_arrays("SPY", ts_ns=ts_ns, close=closes)
 
 ### License
 TBD
+
+### Events: EventCalendar
+```python
+import pandas as pd
+from events import EventCalendar
+from stock_series import StockSeries
+from gbm import GBM
+
+# Load price series (dates, closes) -> StockSeries
+series = StockSeries.from_alphavantage("SPY", (dates, closes))
+
+# Load events from CSV/DataFrame
+cal = EventCalendar.from_csv("data/events_calendar.csv")
+
+# Build per-type and combined masks aligned to the series
+masks = cal.align(
+    series,
+    window_by_type={
+        "FOMC Meeting": (0, 0),
+        "Consumer Price Index": (0, 0),
+        "Employment Situation": (0, 0),
+    },
+    precedence=["FOMC Meeting", "Consumer Price Index", "Employment Situation"],
+)
+
+# Combined mask: multiple events on same day -> one True
+event_days = masks["any"]            # shape: (series.n,)
+counts = masks["counts"]             # number of events per day
+fomc_days = masks["FOMC Meeting"]    # precedence-assigned mask
+
+# Build per-step sigma_t attributing return to end day
+sigma_t = EventCalendar.to_sigma_t(series, sigma_event=0.30, sigma_calm=0.20, mask_days=event_days, attribute_to="end")
+
+# Simulate with time-varying sigma
+gbm = GBM()
+paths = gbm.paths_timevarying(S0=series.close[-1], mu_t=np.full(series.n - 1, 0.08), sigma_t=sigma_t, n_paths=10000, seed=42)
+```

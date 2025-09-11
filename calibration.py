@@ -180,7 +180,40 @@ class Calibration:
         """
         return float(mu_log_annual + 0.5 * (sigma_annual ** 2))
 
+    def compute_sigma_mad_annual(
+        self,
+        daily_log_returns: np.ndarray,
+        *,
+        clip_nan: bool = True,
+    ) -> Tuple[float, float]:
+        """Robust sigma via MAD about the median (50% breakdown).
 
-__all__ = ["Calibration", "CalibrationResult", "calibrate_from_series", "calibrate"]
+        sigma_daily ≈ median(|r - median(r)|) / 0.6744897501960817
+        Returns (sigma_annual, sigma_daily).
+        """
+        r = np.asarray(daily_log_returns, dtype=float)
+        if r.ndim != 1:
+            raise ValueError("daily_log_returns must be a 1-D array")
+        if clip_nan:
+            r = r[np.isfinite(r)]
+        if r.size == 0:
+            raise ValueError("No finite log returns provided")
+
+        med = float(np.median(r))
+        mad = float(np.median(np.abs(r - med)))
+        scale = 0.6744897501960817  # Phi^{-1}(0.75)
+        sigma_daily = mad / scale
+        sigma_annual = float(sigma_daily * np.sqrt(self.trading_days))
+        return sigma_annual, float(sigma_daily)
+
+
+__all__ = [
+    "Calibration",
+    "CalibrationResult",
+    "calibrate_from_series",
+    "calibrate",
+    # helpers
+    # sigma estimators
+]
 
 
