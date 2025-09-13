@@ -143,6 +143,74 @@ class EventCalendar:
             event_days = self.dates[sel]
         return self._per_type_day_mask(series_days, event_days, window)
 
+    # ---------- Introspection helpers ----------
+    def unique_event_names(self) -> np.ndarray:
+        """Return sorted unique event names."""
+        return np.unique(self.names.astype(str))
+
+    def event_dates(
+        self,
+        event_name: str,
+        *,
+        start: Optional[Any] = None,
+        end: Optional[Any] = None,
+        as_strings: bool = False,
+        unique: bool = True,
+        trading_days: Optional[Any] = None,
+        series: Optional[Any] = None,
+    ) -> np.ndarray:
+        """List dates for a specific event name.
+
+        - start/end: optional date bounds (inclusive on both) to filter.
+        - as_strings: return ISO strings if True, else datetime64[D] array.
+        - unique: drop duplicates (default True).
+        - trading_days: optional trading-day filter. Options:
+            * True  -> use `series` trading days (requires `series` argument)
+            * False/None -> no trading-day filtering
+            * StockSeries or iterable of dates -> use those as trading days
+        - series: StockSeries to pull trading days from when trading_days is True
+        """
+        sel = (self.names.astype(str) == str(event_name))
+        d = self.dates[sel]
+        if start is not None:
+            d0 = _to_datetime64D([start])[0]
+            d = d[d >= d0]
+        if end is not None:
+            d1 = _to_datetime64D([end])[0]
+            d = d[d <= d1]
+        if unique:
+            d = np.unique(d)
+        if trading_days is not None:
+            # Bool flag path: use provided series
+            if isinstance(trading_days, (bool, np.bool_)):
+                if trading_days:
+                    if series is None or not hasattr(series, "as_datetime64"):
+                        raise ValueError("When trading_days=True, provide `series` (StockSeries) to derive trading calendar")
+                    td = series.as_datetime64().astype("datetime64[D]")
+                else:
+                    td = None
+            else:
+                # Accept StockSeries instance or an array-like of dates
+                if hasattr(trading_days, "as_datetime64"):
+                    td = trading_days.as_datetime64().astype("datetime64[D]")
+                else:
+                    td = _to_datetime64D(trading_days)
+
+            if td is not None:
+                if td.size == 0:
+                    d = d[:0]
+                else:
+                    td_u = np.unique(td)
+                    d = d[np.isin(d, td_u)]
+        if as_strings:
+            return d.astype("datetime64[D]").astype(str)
+        return d.astype("datetime64[D]")
+
+    def events_on(self, day: Any) -> np.ndarray:
+        """Return event names occurring on a specific calendar day."""
+        d = _to_datetime64D([day])[0]
+        return self.names[self.dates == d].astype(str)
+
     @staticmethod
     def to_sigma_t(series: Any, *, sigma_event: float, sigma_calm: float, mask_days: np.ndarray, attribute_to: str = "end") -> np.ndarray:
         """Build per-step sigma_t array from a day mask.

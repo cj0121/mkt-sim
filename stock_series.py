@@ -392,6 +392,23 @@ class StockSeries:
             end_idx = int(np.searchsorted(ts, end_ns, side="left"))
         return self.window(start_idx, end_idx)
 
+    def slice_by_date(self, start: Optional[Any] = None, end: Optional[Any] = None) -> "StockSeries":
+        """Slice by date-like bounds (e.g., "YYYY-MM-DD").
+
+        Semantics match slice_by_time: start-inclusive, end-exclusive using left bounds.
+        Accepts strings, numpy.datetime64, or datetime.date/datetime.
+        """
+        def to_ns(val: Optional[Any]) -> Optional[int]:
+            if val is None:
+                return None
+            try:
+                v = np.datetime64(val, "ns")
+            except Exception:
+                v = np.datetime64(str(val), "ns")
+            return int(v.view("int64"))
+
+        return self.slice_by_time(to_ns(start), to_ns(end))
+
     def as_datetime64(self) -> NDArray[np.datetime64]:
         return self.ts_ns.view("datetime64[ns]")
 

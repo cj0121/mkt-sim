@@ -32,9 +32,12 @@ class GBM:
 
         # Dates and business day calendar
         self.start_date = self._to_datetime64D(start_date) if start_date is not None else np.datetime64("today", "D")
-        holidays_arr = None
-        if holidays is not None and len(holidays) > 0:
-            holidays_arr = np.array([self._to_datetime64D(h) for h in holidays], dtype="datetime64[D]")
+        # Normalize holidays to a 1-D datetime64[D] array. Some NumPy versions
+        # require an array (not None), so we pass an empty array when no holidays provided.
+        if holidays is None or len(holidays) == 0:
+            holidays_arr = np.array([], dtype="datetime64[D]")
+        else:
+            holidays_arr = np.asarray([self._to_datetime64D(h) for h in holidays], dtype="datetime64[D]").reshape(-1)
         self._busdaycal = np.busdaycalendar(weekmask="1111100", holidays=holidays_arr)
 
     # ---- Date helpers ----
