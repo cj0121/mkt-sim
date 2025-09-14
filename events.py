@@ -158,6 +158,8 @@ class EventCalendar:
         unique: bool = True,
         trading_days: Optional[Any] = None,
         series: Optional[Any] = None,
+        consider_precedence: bool = False,
+        precedence: Optional[Sequence[str]] = None,
     ) -> np.ndarray:
         """List dates for a specific event name.
 
@@ -169,6 +171,9 @@ class EventCalendar:
             * False/None -> no trading-day filtering
             * StockSeries or iterable of dates -> use those as trading days
         - series: StockSeries to pull trading days from when trading_days is True
+        - consider_precedence: if True and `precedence` is provided, remove dates
+          that collide with higher-priority event types (those listed before
+          `event_name` in `precedence`). Defaults to False (ignore precedence).
         """
         sel = (self.names.astype(str) == str(event_name))
         d = self.dates[sel]
@@ -180,6 +185,31 @@ class EventCalendar:
             d = d[d <= d1]
         if unique:
             d = np.unique(d)
+
+        # Optional precedence filtering on raw calendar days (no windowing)
+        if consider_precedence:
+            # If no precedence provided, pick a sensible default when available
+            if precedence is None or len(precedence) == 0:
+                # Common macro precedence; fall back to observed unique order otherwise
+                common = [
+                    "FOMC Meeting", 
+                    "Employment Situation", 
+                    "Consumer Price Index", 
+                    "Producer Price Index", 
+                    "Employment Cost Index"
+                ]
+                # Keep only those present; append remaining unique names to end
+                uniq = list(np.unique(self.names.astype(str)))
+                precedence = [n for n in common if n in uniq] + [n for n in uniq if n not in common]
+
+            if event_name in precedence:
+                idx = list(precedence).index(event_name)
+                higher = set(precedence[:idx])
+                if higher:
+                    higher_sel = np.isin(self.names.astype(str), np.array(list(higher)))
+                    higher_dates = np.unique(self.dates[higher_sel])
+                    if higher_dates.size > 0 and d.size > 0:
+                        d = d[~np.isin(d, higher_dates)]
         if trading_days is not None:
             # Bool flag path: use provided series
             if isinstance(trading_days, (bool, np.bool_)):

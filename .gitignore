@@ -54,3 +54,7 @@ coverage.xml
 *.ipynb
 
 data/
+
+# Versioning
+registry/
+wandb/

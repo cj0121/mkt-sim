@@ -207,6 +207,59 @@ Expected quick test output:
 ALL TESTS PASSED
 ```
 
+### Versioning (models and artifacts)
+
+`utils.WandbRegistry` provides a lightweight registry on top of W&B artifacts plus a local filesystem copy.
+
+```python
+import os, utils
+os.environ.setdefault("WANDB_MODE", "offline")  # or "online"
+
+reg = utils.WandbRegistry(env="dev", base_project="model-registry", base_registry_dir="registry")
+
+class DummyModel:
+    def __init__(self, c): self.c=float(c)
+
+# Save
+info = reg.save(
+    DummyModel(0.5),
+    name="daily_vol_model",
+    semantic_version="0.1.0",
+    start_date="2024-01-01", end_date="2024-06-30", run_date="2024-06-30",
+    metrics={"rmse": 0.12}, tags=["exp1"], description="first cut",
+)
+
+# List and load
+folders = reg.list_hashes("daily_vol_model")          # ["<hash>_0.1.0", ...]
+latest  = reg.latest_hash("daily_vol_model")          # "<hash>_0.1.0"
+model   = reg.load_local("daily_vol_model", latest.split("_")[0])
+
+# Promote to prod
+prod = utils.WandbRegistry(env="prod", base_project="model-registry", base_registry_dir="registry")
+reg.promote(prod, "daily_vol_model", info["hash"])   # copies model + metadata
+```
+
+Folder layout (auto-created):
+```
+registry/
+  dev/
+    daily_vol_model/
+      <hash>_0.1.0/
+        model.pkl
+        metadata.json
+  prod/
+    daily_vol_model/
+      <hash>_0.1.0/
+        model.pkl
+        metadata.json
+```
+
+Notes:
+- W&B in online mode uploads the artifact; offline mode stores it under `./wandb/`.
+- Local registry is always written under `base_registry_dir/env/...` for fast runtime loads.
+- `latest_hash(name)` chooses newest by `metadata.timestamp`.
+- `load_local(name, hash)` accepts a bare hash or `hash_semver` (resolver handles both).
+
 ---
 
 ### Design notes

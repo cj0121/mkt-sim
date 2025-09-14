@@ -439,6 +439,54 @@ class StockSeries:
             object.__setattr__(self, "_log_returns", val)
         return val
 
+    # ---------- Tabular export ----------
+    def as_dataframe(
+        self,
+        *,
+        include_optionals: bool = True,
+        include_log: bool = True,
+        include_log_returns: bool = True,
+    ):
+        """Return a pandas DataFrame with common columns.
+
+        Columns always included:
+        - ts_ns (int64), date (datetime64[ns]), close (float64)
+        Optionally includes present optionals (open, high, low, adj_close, volume),
+        log_close, and log_returns (aligned length with NaN in the first row).
+        """
+        try:
+            import pandas as pd  # type: ignore
+        except Exception as exc:  # pragma: no cover
+            raise RuntimeError("pandas is required for as_dataframe()") from exc
+
+        data = {
+            "ts_ns": self.ts_ns.copy(),
+            "date": self.as_datetime64().copy(),
+            "close": self.close.copy(),
+        }
+
+        if include_optionals:
+            if self.open is not None:
+                data["open"] = self.open.copy()
+            if self.high is not None:
+                data["high"] = self.high.copy()
+            if self.low is not None:
+                data["low"] = self.low.copy()
+            if self.adj_close is not None:
+                data["adj_close"] = self.adj_close.copy()
+            if self.volume is not None:
+                data["volume"] = self.volume.copy()
+
+        if include_log:
+            data["log_close"] = np.log(self.close)
+
+        if include_log_returns:
+            lr = np.full(self.close.shape[0], np.nan, dtype=float)
+            lr[1:] = np.diff(np.log(self.close))
+            data["log_returns"] = lr
+
+        return pd.DataFrame(data)
+
 
 __all__ = ["StockSeries"]
 
